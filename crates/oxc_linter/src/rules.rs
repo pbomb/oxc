@@ -462,6 +462,8 @@ pub(crate) mod react {
 
 pub(crate) mod react_compiler {
     pub mod react_compiler_rule;
+    pub(crate) mod cache;
+    pub(crate) mod shared;
 }
 
 pub(crate) mod react_perf {
