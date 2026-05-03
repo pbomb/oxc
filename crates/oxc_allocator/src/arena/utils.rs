@@ -68,7 +68,7 @@ pub unsafe fn round_up_to_unchecked(n: usize, divisor: usize) -> usize {
 }
 
 #[inline]
-pub fn round_down_to(n: usize, divisor: usize) -> usize {
+pub const fn round_down_to(n: usize, divisor: usize) -> usize {
     debug_assert!(divisor.is_power_of_two());
     n & !(divisor - 1)
 }

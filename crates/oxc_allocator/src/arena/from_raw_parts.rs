@@ -19,8 +19,13 @@ impl<const MIN_ALIGN: usize> Arena<MIN_ALIGN> {
     /// `backing_alloc_ptr` and `layout`.
     ///
     /// The [`Arena`] which is returned takes ownership of the backing allocation, and it will be freed
-    /// via the [`System`] allocator (using `backing_alloc_ptr` and `layout`) when the `Arena` is dropped.
-    /// If caller wishes to prevent that happening, they must wrap the `Arena` in `ManuallyDrop`.
+    /// when the `Arena` is dropped, using `backing_alloc_ptr` and `layout`.
+    ///
+    /// The method used to free the backing allocation is platform-dependent:
+    /// * Linux/Mac: via the [`System`] allocator
+    /// * Windows: `VirtualFree`
+    ///
+    /// If caller wishes to prevent that happening, they must wrap the [`Arena`] in [`ManuallyDrop`].
     ///
     /// The [`Arena`] returned by this function cannot grow.
     ///
@@ -33,11 +38,12 @@ impl<const MIN_ALIGN: usize> Arena<MIN_ALIGN> {
     ///   the allocation described by `backing_alloc_ptr` and `layout`
     ///   (i.e. `start_ptr >= backing_alloc_ptr` and `start_ptr + size <= backing_alloc_ptr + layout.size()`).
     /// * The allocation described by `backing_alloc_ptr` and `layout` must have been allocated from
-    ///   the [`System`] allocator with that same `layout` (or caller must wrap the `Arena` in `ManuallyDrop`
-    ///   and ensure the backing memory is freed correctly themselves).
+    ///   the platform-specific allocator (see list above) with that same `layout` (or caller must wrap the `Arena`
+    ///   in `ManuallyDrop` and ensure the backing memory is freed correctly themselves).
     /// * `start_ptr` and `backing_alloc_ptr` must have permission for writes.
     ///
     /// [`System`]: std::alloc::System
+    /// [`ManuallyDrop`]: std::mem::ManuallyDrop
     pub unsafe fn from_raw_parts(
         start_ptr: NonNull<u8>,
         size: usize,
