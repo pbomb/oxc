@@ -886,6 +886,42 @@ impl Scoping {
         });
     }
 
+    /// Move bindings matching `predicate` from one scope to another.
+    pub fn move_bindings_if<F>(&mut self, from: ScopeId, to: ScopeId, mut predicate: F)
+    where
+        F: FnMut(SymbolId, SymbolFlags) -> bool,
+    {
+        if from == to {
+            return;
+        }
+        let mut from_index = from.index();
+        let mut to_index = to.index();
+        let from_is_lower = from_index < to_index;
+        if !from_is_lower {
+            std::mem::swap(&mut from_index, &mut to_index);
+        }
+
+        let symbol_table = &mut self.symbol_table;
+        self.cell.with_dependent_mut(|_allocator, cell| {
+            let bindings = cell.bindings.as_raw_slice_mut();
+
+            let (left, right) = bindings.split_at_mut(to_index);
+            let (left_map, right_map) = (&mut left[from_index], &mut right[0]);
+            let (from_map, to_map) =
+                if from_is_lower { (left_map, right_map) } else { (right_map, left_map) };
+
+            for (name, symbol_id) in from_map.extract_if(|_, symbol_id| {
+                let should_move = predicate(*symbol_id, *symbol_table.symbol_flags(*symbol_id));
+                if should_move {
+                    *symbol_table.symbol_scope_ids_mut(*symbol_id) = to;
+                }
+                should_move
+            }) {
+                to_map.insert(name, symbol_id);
+            }
+        });
+    }
+
     /// Rename a binding to a new name.
     ///
     /// The following must be true for successful operation:

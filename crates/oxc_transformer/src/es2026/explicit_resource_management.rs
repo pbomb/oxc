@@ -209,12 +209,39 @@ impl<'a> Traverse<'a, TransformState<'a>> for ExplicitResourceManagement<'a> {
         if let Some((new_stmts, needs_await, using_ctx)) =
             self.transform_statements(&mut body.statements, ctx.current_hoist_scope_id(), ctx)
         {
-            // FIXME: this creates the scopes in the correct place, however we never move the bindings contained
-            // within `new_stmts` to the new scope.
+            let current_scope_id = ctx.current_scope_id();
             let block_stmt_scope_id =
                 ctx.insert_scope_below_statements(&new_stmts, ScopeFlags::empty());
 
-            let current_scope_id = ctx.current_scope_id();
+            // `insert_scope_below_statements` creates the new scope for the generated `try` body.
+            //
+            // Any child scopes of `current_scope_id` (the function body) have been moved to
+            // `block_stmt_scope_id` (the `try` body).
+            //
+            // However, direct bindings are still stored in `current_scope_id` (the function body).
+            // Move any block-scoped bindings from `current_scope_id` into `block_stmt_scope_id` (the
+            // `try` body) so the binding map matches the new AST shape.
+            //
+            // ```js
+            // function f() {
+            //   try {
+            //     const x = 3; // Before `move_bindings_if`, `x` still points to the function body scope.
+            //   } catch (_) {}
+            // }
+            // ```
+            //
+            // `move_bindings_if` walks the binding map for `current_scope_id`, extracts bindings whose
+            // symbol flags match the predicate, updates each moved symbol's scope id, and inserts the
+            // binding into `block_stmt_scope_id`. Function parameters and `var` bindings such as `_usingCtx`
+            // do not match the predicate and remain in the function body scope.
+            ctx.scoping_mut().move_bindings_if(
+                current_scope_id,
+                block_stmt_scope_id,
+                |_, flags| {
+                    flags.contains(SymbolFlags::BlockScopedVariable)
+                        || flags.contains(SymbolFlags::Class)
+                },
+            );
 
             body.statements = ctx.ast.vec1(Self::create_try_stmt(
                 ctx.ast.block_statement_with_scope_id(SPAN, new_stmts, block_stmt_scope_id),
