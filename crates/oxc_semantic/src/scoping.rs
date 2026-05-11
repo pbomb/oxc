@@ -886,7 +886,30 @@ impl Scoping {
         });
     }
 
-    /// Move bindings matching `predicate` from one scope to another.
+    /// Move direct bindings matching `predicate` from one scope to another.
+    ///
+    /// This only inspects the binding map for `from`; it does not walk descendant scopes. The
+    /// predicate receives each symbol and its flags. Returning `true` removes that binding from
+    /// `from`, updates the symbol's recorded scope id to `to`, and inserts the binding into `to`.
+    ///
+    /// For example, after inserting a generated block scope below a function body, direct lexical
+    /// bindings may still be recorded on the function body scope:
+    ///
+    /// ```text
+    /// function body scope
+    ///   bindings: x, C, _usingCtx
+    ///   generated block scope
+    /// ```
+    ///
+    /// Calling `move_bindings_if(function_scope, block_scope, predicate)` can move only the
+    /// bindings selected by `predicate`, leaving the rest behind:
+    ///
+    /// ```text
+    /// function body scope
+    ///   bindings: _usingCtx
+    ///   generated block scope
+    ///     bindings: x, C
+    /// ```
     pub fn move_bindings_if<F>(&mut self, from: ScopeId, to: ScopeId, mut predicate: F)
     where
         F: FnMut(SymbolId, SymbolFlags) -> bool,

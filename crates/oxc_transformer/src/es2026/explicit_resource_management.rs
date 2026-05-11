@@ -215,12 +215,12 @@ impl<'a> Traverse<'a, TransformState<'a>> for ExplicitResourceManagement<'a> {
 
             // `insert_scope_below_statements` creates the new scope for the generated `try` body.
             //
-            // Any child scopes of `current_scope_id` (the function body) have been moved to
-            // `block_stmt_scope_id` (the `try` body).
+            // Child scopes collected from `new_stmts` have been moved from `current_scope_id` (the
+            // function body) to `block_stmt_scope_id` (the `try` body).
             //
             // However, direct bindings are still stored in `current_scope_id` (the function body).
-            // Move any block-scoped bindings from `current_scope_id` into `block_stmt_scope_id` (the
-            // `try` body) so the binding map matches the new AST shape.
+            // Move the direct lexical variable and class bindings from `current_scope_id` into
+            // `block_stmt_scope_id` so the binding map matches the new AST shape.
             //
             // ```js
             // function f() {
@@ -231,9 +231,10 @@ impl<'a> Traverse<'a, TransformState<'a>> for ExplicitResourceManagement<'a> {
             // ```
             //
             // `move_bindings_if` walks the binding map for `current_scope_id`, extracts bindings whose
-            // symbol flags match the predicate, updates each moved symbol's scope id, and inserts the
-            // binding into `block_stmt_scope_id`. Function parameters and `var` bindings such as `_usingCtx`
-            // do not match the predicate and remain in the function body scope.
+            // symbol flags match the predicate (`BlockScopedVariable` or `Class`), updates each moved
+            // symbol's scope id, and inserts the binding into `block_stmt_scope_id`. Function parameters
+            // and `var` bindings such as `_usingCtx` do not match the predicate and remain in the
+            // function body scope.
             ctx.scoping_mut().move_bindings_if(
                 current_scope_id,
                 block_stmt_scope_id,
