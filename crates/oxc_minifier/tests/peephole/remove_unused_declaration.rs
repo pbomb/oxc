@@ -132,6 +132,11 @@ fn remove_unused_pure_iife_init() {
         "export function f() {} f();",
         &options,
     );
+
+    // Empty async/generator IIFE in unused-var-init position now collapses
+    // through `is_expression_result_unused` (which the widening newly covers).
+    test_options("var x = (async () => {})()", "", &options);
+    test_options("var x = (function* () {})()", "", &options);
 }
 
 #[test]

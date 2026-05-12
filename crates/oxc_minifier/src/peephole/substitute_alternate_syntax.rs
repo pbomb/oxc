@@ -1750,13 +1750,11 @@ impl<'a> PeepholeOptimizations {
     /// walking the full chain would over-broaden the guard to function-local
     /// vars inside exported functions.
     fn var_declaration_is_exported(ctx: &TraverseCtx<'a>) -> bool {
-        matches!(
-            ctx.ancestors().nth(2),
-            Some(
-                Ancestor::ExportNamedDeclarationDeclaration(_)
-                    | Ancestor::ExportDefaultDeclarationDeclaration(_)
-            )
-        )
+        // Only `ExportNamedDeclaration`'s `declaration` field can hold a
+        // `VariableDeclaration`. `export default` wraps a function / class /
+        // expression — never a `VariableDeclaration` — so no arm is needed
+        // for it.
+        matches!(ctx.ancestors().nth(2), Some(Ancestor::ExportNamedDeclarationDeclaration(_)))
     }
 
     /// Optimizes the usage of Immediately Invoked Function Expressions (IIFEs)
