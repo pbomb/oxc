@@ -1866,7 +1866,7 @@ impl<'a> PeepholeOptimizations {
     fn try_take_iife_body(
         body: &mut Expression<'a>,
         is_pure: bool,
-        ctx: &mut TraverseCtx<'a>,
+        ctx: &TraverseCtx<'a>,
     ) -> Option<Expression<'a>> {
         if Self::iife_inline_would_lose_pure(is_pure, body, ctx) {
             return None;
