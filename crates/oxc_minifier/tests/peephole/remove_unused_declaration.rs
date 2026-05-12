@@ -57,6 +57,76 @@ fn remove_unused_variable_declaration() {
 }
 
 #[test]
+fn remove_unused_pure_iife_init() {
+    // https://github.com/oxc-project/oxc/issues/17480
+    let options = CompressOptions::smallest();
+
+    test_options("var x = /* @__PURE__ */ foo()", "", &options);
+    test_options("var x = /* @__PURE__ */ new Foo()", "", &options);
+    test_options("var x = /* @__PURE__ */ foo(a)", "a;", &options);
+    test_options("var x = /* @__PURE__ */ foo(bar())", "bar();", &options);
+    test_options("var x = /* @__PURE__ */ new Foo(bar())", "bar();", &options);
+    test_options("var x = /* @__PURE__ */ foo(/* @__PURE__ */ bar(z))", "z;", &options);
+
+    test_options("var x = /* @__PURE__ */ (() => foo())()", "", &options);
+    test_options("var x = /* @__PURE__ */ (() => new Foo())()", "", &options);
+    test_options("var x = /* @__PURE__ */ (() => { return foo() })()", "", &options);
+    test_options("var x = /* @__PURE__ */ (() => { foo() })()", "", &options);
+
+    test_options("var x = /* @__PURE__ */ (() => g.x)()", "", &options);
+    test_options("var x = /* @__PURE__ */ (() => g[k])()", "", &options);
+    test_options("var x = /* @__PURE__ */ (() => foo`tpl`)()", "", &options);
+    test_options("var x = /* @__PURE__ */ (() => [a, b])()", "", &options);
+    test_options("var x = /* @__PURE__ */ (() => ({ a }))()", "", &options);
+    test_options("var x = /* @__PURE__ */ (() => a + b)()", "", &options);
+    test_options("var x = /* @__PURE__ */ (() => `${a}`)()", "", &options);
+    test_options("var x = /* @__PURE__ */ (() => foo()?.bar())()", "", &options);
+
+    test_options("var x = /* @__PURE__ */ (function() { return foo() })()", "", &options);
+
+    test_options("let x = /* @__PURE__ */ (() => g.x)()", "", &options);
+    test_options("const x = /* @__PURE__ */ (() => g.x)()", "", &options);
+
+    test_options(
+        "var x = /* @__PURE__ */ foo(), y = bar(); use(y);",
+        "var y = bar(); use(y);",
+        &options,
+    );
+
+    // Exported bindings are cross-module reachable — the export-ancestor
+    // check blocks the early drop.
+    test_options(
+        "export var x = /* @__PURE__ */ foo()",
+        "export var x = /* @__PURE__ */ foo();",
+        &options,
+    );
+    test_options(
+        "export const x = /* @__PURE__ */ (() => foo())();",
+        "export const x = /* @__PURE__ */ foo();",
+        &options,
+    );
+    test_options(
+        "export const x = /* @__PURE__ */ (() => g.x)();",
+        "export const x = g.x;",
+        &options,
+    );
+
+    test_options("var x = (() => g.x)();", "g.x;", &options);
+
+    // `using` runs `[Symbol.dispose]` at scope exit, so the declarator stays.
+    test_options(
+        "using x = /* @__PURE__ */ (() => foo())()",
+        "using x = /* @__PURE__ */ foo();",
+        &options,
+    );
+    test_options(
+        "await using x = /* @__PURE__ */ (() => foo())()",
+        "await using x = /* @__PURE__ */ foo();",
+        &options,
+    );
+}
+
+#[test]
 fn remove_unused_function_declaration() {
     let options = CompressOptions::smallest();
     test_options("function foo() {}", "", &options);
