@@ -1738,13 +1738,18 @@ impl<'a> PeepholeOptimizations {
                 // `VariableDeclaration` never routes through
                 // `handle_variable_declaration`, so dropping the init here
                 // would silently break the export's runtime value.
-                !ctx.ancestors().any(|a| {
-                    matches!(
-                        a,
+                //
+                // Only check the great-grandparent — that's the slot
+                // immediately above `VariableDeclaration`. Walking the entire
+                // ancestor chain would over-broaden the guard for
+                // function-local vars inside exported functions.
+                !matches!(
+                    ctx.ancestors().nth(2),
+                    Some(
                         Ancestor::ExportNamedDeclarationDeclaration(_)
                             | Ancestor::ExportDefaultDeclarationDeclaration(_)
                     )
-                })
+                )
             }
             _ => false,
         }

@@ -124,6 +124,14 @@ fn remove_unused_pure_iife_init() {
         "await using x = /* @__PURE__ */ foo();",
         &options,
     );
+
+    // Function-local var inside an exported function — the export ancestor
+    // walk must not be fooled by `f` being exported. `x` is a local.
+    test_options(
+        "export function f() { var x = /* @__PURE__ */ (() => foo())(); } f();",
+        "export function f() {} f();",
+        &options,
+    );
 }
 
 #[test]
