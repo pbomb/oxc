@@ -1864,17 +1864,20 @@ impl<'a> PeepholeOptimizations {
     /// annotation the developer placed on the outer call. Only fires in
     /// DCE-only mode (rolldown's per-module preprocess); full-minify mode
     /// inlines aggressively since there's no downstream to preserve for.
+    ///
+    /// The outer IIFE call has no arguments — its `pure` flag covers the
+    /// entire body evaluation as a unit. Inlining a body that has *any* side
+    /// effects (even a `CallExpression`/`NewExpression` with side-effectful
+    /// arguments or a side-effectful callee) surfaces those sub-effects at
+    /// the outer level, where rolldown's side-effect detector flags them
+    /// regardless of the `pure` flag on the inlined call. Preserve the IIFE
+    /// wrapper so the annotation keeps its original strength.
     fn iife_inline_would_lose_pure(
         is_pure: bool,
         body: &Expression<'a>,
         ctx: &TraverseCtx<'a>,
     ) -> bool {
         if !is_pure || !ctx.state.dce {
-            return false;
-        }
-        let body_carries_pure =
-            matches!(body, Expression::CallExpression(_) | Expression::NewExpression(_));
-        if body_carries_pure {
             return false;
         }
         body.may_have_side_effects(ctx)
