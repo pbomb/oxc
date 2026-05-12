@@ -562,10 +562,6 @@ fn preserve_pure_iife_in_used_position_for_downstream_treeshake() {
     test_same("export const x = /* @__PURE__ */ (() => (a(), b()))();");
     test_same("export const x = /* @__PURE__ */ (() => c ? a() : b())();");
 
-    // Call / new bodies — the outer IIFE has no arguments, so its pure flag
-    // covers the body's evaluation as a unit. Inlining surfaces the body's
-    // side-effectful callee or arguments at the outer level, where rolldown
-    // would flag them. Preserve the IIFE wrapper.
     test_same("export const x = /* @__PURE__ */ (() => foo())();");
     test_same("export const x = /* @__PURE__ */ (() => new Foo())();");
     // Effectful arg inside the body call — the original IIFE could be dropped
@@ -574,6 +570,5 @@ fn preserve_pure_iife_in_used_position_for_downstream_treeshake() {
     test_same("export const x = /* @__PURE__ */ (() => foo(bar()))();");
     test_same("export const x = /* @__PURE__ */ (() => new Foo(bar()))();");
 
-    // Side-effect-free body — nothing to preserve, inline freely.
     test("export const x = /* @__PURE__ */ (() => 42)();", "export const x = 42;");
 }

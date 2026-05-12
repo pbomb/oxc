@@ -1734,25 +1734,29 @@ impl<'a> PeepholeOptimizations {
                 if !ctx.scoping().symbol_is_unused(symbol_id) {
                     return false;
                 }
-                // Exported bindings are cross-module reachable; the inner
-                // `VariableDeclaration` never routes through
-                // `handle_variable_declaration`, so dropping the init here
-                // would silently break the export's runtime value.
-                //
-                // Only check the great-grandparent — that's the slot
-                // immediately above `VariableDeclaration`. Walking the entire
-                // ancestor chain would over-broaden the guard for
-                // function-local vars inside exported functions.
-                !matches!(
-                    ctx.ancestors().nth(2),
-                    Some(
-                        Ancestor::ExportNamedDeclarationDeclaration(_)
-                            | Ancestor::ExportDefaultDeclarationDeclaration(_)
-                    )
-                )
+                !Self::var_declaration_is_exported(ctx)
             }
             _ => false,
         }
+    }
+
+    /// `true` if the `VariableDeclaration` that contains the current expression
+    /// (entered via `VariableDeclaratorInit`) sits directly under an `export`
+    /// wrapper. Exports are cross-module reachable, and the inner
+    /// `VariableDeclaration` never routes through `handle_variable_declaration`
+    /// — dropping its init would silently break the export's runtime value.
+    ///
+    /// Checks the exact ancestor slot above `VariableDeclaration` only;
+    /// walking the full chain would over-broaden the guard to function-local
+    /// vars inside exported functions.
+    fn var_declaration_is_exported(ctx: &TraverseCtx<'a>) -> bool {
+        matches!(
+            ctx.ancestors().nth(2),
+            Some(
+                Ancestor::ExportNamedDeclarationDeclaration(_)
+                    | Ancestor::ExportDefaultDeclarationDeclaration(_)
+            )
+        )
     }
 
     /// Optimizes the usage of Immediately Invoked Function Expressions (IIFEs)
@@ -1808,11 +1812,9 @@ impl<'a> PeepholeOptimizations {
                 if is_pure && Self::is_expression_result_unused(ctx) {
                     *e = ctx.ast.void_0(call_expr.span);
                 } else {
-                    if Self::iife_inline_would_lose_pure(is_pure, expr, ctx) {
+                    let Some(taken) = Self::try_take_iife_body(expr, is_pure, ctx) else {
                         return;
-                    }
-                    let mut taken = expr.take_in(ctx.ast);
-                    Self::propagate_pure_to_inlined(is_pure, &mut taken);
+                    };
                     *e = taken;
                 }
                 ctx.state.changed = true;
@@ -1824,11 +1826,11 @@ impl<'a> PeepholeOptimizations {
                     if is_pure && Self::is_expression_result_unused(ctx) {
                         *e = ctx.ast.void_0(call_expr.span);
                     } else {
-                        if Self::iife_inline_would_lose_pure(is_pure, &expr_stmt.expression, ctx) {
+                        let Some(taken) =
+                            Self::try_take_iife_body(&mut expr_stmt.expression, is_pure, ctx)
+                        else {
                             return;
-                        }
-                        let mut taken = expr_stmt.expression.take_in(ctx.ast);
-                        Self::propagate_pure_to_inlined(is_pure, &mut taken);
+                        };
                         *e = ctx.ast.expression_sequence(expr_stmt.span, {
                             let mut sequence = ctx.ast.vec();
                             sequence.push(taken);
@@ -1845,11 +1847,10 @@ impl<'a> PeepholeOptimizations {
                         if is_pure && Self::is_expression_result_unused(ctx) {
                             *e = ctx.ast.void_0(call_expr.span);
                         } else {
-                            if Self::iife_inline_would_lose_pure(is_pure, argument, ctx) {
+                            let Some(taken) = Self::try_take_iife_body(argument, is_pure, ctx)
+                            else {
                                 return;
-                            }
-                            let mut taken = argument.take_in(ctx.ast);
-                            Self::propagate_pure_to_inlined(is_pure, &mut taken);
+                            };
                             *e = taken;
                         }
                         ctx.state.changed = true;
@@ -1860,18 +1861,35 @@ impl<'a> PeepholeOptimizations {
         }
     }
 
-    /// Whether inlining the IIFE body would silently drop a `/* @__PURE__ */`
-    /// annotation the developer placed on the outer call. Only fires in
-    /// DCE-only mode (rolldown's per-module preprocess); full-minify mode
-    /// inlines aggressively since there's no downstream to preserve for.
-    ///
-    /// The outer IIFE call has no arguments — its `pure` flag covers the
-    /// entire body evaluation as a unit. Inlining a body that has *any* side
-    /// effects (even a `CallExpression`/`NewExpression` with side-effectful
-    /// arguments or a side-effectful callee) surfaces those sub-effects at
-    /// the outer level, where rolldown's side-effect detector flags them
-    /// regardless of the `pure` flag on the inlined call. Preserve the IIFE
-    /// wrapper so the annotation keeps its original strength.
+    /// Take the IIFE body out for inlining, propagating the outer `pure`
+    /// annotation onto a call/new body. Returns `None` when the propagation
+    /// wouldn't preserve the outer assertion (see [`Self::iife_inline_would_lose_pure`])
+    /// — the caller bails and the IIFE wrapper stays intact.
+    fn try_take_iife_body(
+        body: &mut Expression<'a>,
+        is_pure: bool,
+        ctx: &mut TraverseCtx<'a>,
+    ) -> Option<Expression<'a>> {
+        if Self::iife_inline_would_lose_pure(is_pure, body, ctx) {
+            return None;
+        }
+        let mut taken = body.take_in(ctx.ast);
+        if is_pure {
+            match &mut taken {
+                Expression::CallExpression(c) => c.pure = true,
+                Expression::NewExpression(n) => n.pure = true,
+                _ => {}
+            }
+        }
+        Some(taken)
+    }
+
+    /// Whether inlining the IIFE body would weaken the outer pure assertion.
+    /// Fires only in DCE-only mode (rolldown's per-module preprocess): the
+    /// outer call has no arguments, so its `pure` flag covers the entire
+    /// body. Inlining any side-effectful body surfaces sub-effects at the
+    /// outer call site, where rolldown's side-effect detector treats them
+    /// as real side effects regardless of the inlined node's `pure` flag.
     fn iife_inline_would_lose_pure(
         is_pure: bool,
         body: &Expression<'a>,
@@ -1881,17 +1899,6 @@ impl<'a> PeepholeOptimizations {
             return false;
         }
         body.may_have_side_effects(ctx)
-    }
-
-    fn propagate_pure_to_inlined(is_pure: bool, expr: &mut Expression<'a>) {
-        if !is_pure {
-            return;
-        }
-        match expr {
-            Expression::CallExpression(c) => c.pure = true,
-            Expression::NewExpression(n) => n.pure = true,
-            _ => {}
-        }
     }
 }
 
