@@ -1811,50 +1811,48 @@ impl<'a> PeepholeOptimizations {
             if f.expression {
                 // Replace "(() => foo())()" with "foo()"
                 let expr = f.get_expression_mut().unwrap();
-                if is_pure && Self::is_expression_result_unused(ctx) {
-                    *e = ctx.ast.void_0(call_expr.span);
+                *e = if is_pure && Self::is_expression_result_unused(ctx) {
+                    ctx.ast.void_0(call_expr.span)
+                } else if let Some(taken) = Self::try_take_iife_body(expr, is_pure, ctx) {
+                    taken
                 } else {
-                    let Some(taken) = Self::try_take_iife_body(expr, is_pure, ctx) else {
-                        return;
-                    };
-                    *e = taken;
-                }
+                    return;
+                };
                 ctx.state.changed = true;
                 return;
             }
             match &mut f.body.statements[0] {
                 Statement::ExpressionStatement(expr_stmt) => {
                     // Replace "(() => { foo() })()" with "(foo(), undefined)"
-                    if is_pure && Self::is_expression_result_unused(ctx) {
-                        *e = ctx.ast.void_0(call_expr.span);
-                    } else {
-                        let Some(taken) =
-                            Self::try_take_iife_body(&mut expr_stmt.expression, is_pure, ctx)
-                        else {
-                            return;
-                        };
-                        *e = ctx.ast.expression_sequence(expr_stmt.span, {
+                    *e = if is_pure && Self::is_expression_result_unused(ctx) {
+                        ctx.ast.void_0(call_expr.span)
+                    } else if let Some(taken) =
+                        Self::try_take_iife_body(&mut expr_stmt.expression, is_pure, ctx)
+                    {
+                        ctx.ast.expression_sequence(expr_stmt.span, {
                             let mut sequence = ctx.ast.vec();
                             sequence.push(taken);
                             sequence.push(ctx.ast.void_0(call_expr.span));
                             sequence
-                        });
-                    }
+                        })
+                    } else {
+                        return;
+                    };
 
                     ctx.state.changed = true;
                 }
                 Statement::ReturnStatement(ret_stmt) => {
                     if let Some(argument) = &mut ret_stmt.argument {
                         // Replace "(() => { return foo() })()" with "foo()"
-                        if is_pure && Self::is_expression_result_unused(ctx) {
-                            *e = ctx.ast.void_0(call_expr.span);
+                        *e = if is_pure && Self::is_expression_result_unused(ctx) {
+                            ctx.ast.void_0(call_expr.span)
+                        } else if let Some(taken) =
+                            Self::try_take_iife_body(argument, is_pure, ctx)
+                        {
+                            taken
                         } else {
-                            let Some(taken) = Self::try_take_iife_body(argument, is_pure, ctx)
-                            else {
-                                return;
-                            };
-                            *e = taken;
-                        }
+                            return;
+                        };
                         ctx.state.changed = true;
                     }
                 }
