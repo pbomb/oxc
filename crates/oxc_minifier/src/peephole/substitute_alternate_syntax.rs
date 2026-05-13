@@ -1712,7 +1712,9 @@ impl<'a> PeepholeOptimizations {
     /// Whether the expression's result will be discarded — bare expression
     /// statement, or the init of a `var`/`let`/`const` whose binding has no
     /// references and isn't exported. Used by the IIFE inliner to short-circuit
-    /// pure-annotated IIFEs to `void 0` so they drop regardless of body shape.
+    /// pure-annotated IIFEs to `void 0` so they drop regardless of body shape,
+    /// and to allow `(async () => {})()` / `(function* () {})()` (whose return
+    /// value isn't a meaningful result) to collapse in those positions too.
     /// Fixes <https://github.com/oxc-project/oxc/issues/17480>.
     fn is_expression_result_unused(ctx: &TraverseCtx<'a>) -> bool {
         match ctx.parent() {
@@ -1860,9 +1862,11 @@ impl<'a> PeepholeOptimizations {
     }
 
     /// Take the IIFE body out for inlining, propagating the outer `pure`
-    /// annotation onto a call/new body. Returns `None` when the propagation
-    /// wouldn't preserve the outer assertion (see [`Self::iife_inline_would_lose_pure`])
-    /// — the caller bails and the IIFE wrapper stays intact.
+    /// annotation onto a call/new body. Propagation runs in both DCE and
+    /// full-minify modes; only the bail-out (via
+    /// [`Self::iife_inline_would_lose_pure`]) is gated to DCE mode, where
+    /// preserving the IIFE wrapper matters for downstream tools.
+    /// Returns `None` to signal the caller should leave the IIFE intact.
     fn try_take_iife_body(
         body: &mut Expression<'a>,
         is_pure: bool,

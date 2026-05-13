@@ -137,6 +137,24 @@ fn remove_unused_pure_iife_init() {
     // through `is_expression_result_unused` (which the widening newly covers).
     test_options("var x = (async () => {})()", "", &options);
     test_options("var x = (function* () {})()", "", &options);
+
+    // `can_remove_unused_declarators` blocks top-level `var` drops in script
+    // mode (the binding is an observable global). The IIFE inlines with
+    // propagation as in any other position, but the declarator stays.
+    test_options_source_type(
+        "var x = /* @__PURE__ */ (() => stuff())()",
+        "var x = /* @__PURE__ */ stuff();",
+        SourceType::cjs().with_script(true),
+        &options,
+    );
+
+    // Direct eval at the root scope blocks the drop — eval might reference
+    // the binding even when static analysis sees no use.
+    test_options(
+        "eval('x'); var x = /* @__PURE__ */ (() => stuff())()",
+        "eval('x'); var x = /* @__PURE__ */ stuff();",
+        &options,
+    );
 }
 
 #[test]
