@@ -1798,8 +1798,10 @@ impl<'a> PeepholeOptimizations {
             return;
         }
 
-        let is_pure =
-            (call_expr.pure && ctx.annotations()) || ctx.manual_pure_functions(&call_expr.callee);
+        // The callee here is always a function/arrow literal, so
+        // `manual_pure_functions` (which matches named paths like `styled`)
+        // can never apply — only an explicit `/* @__PURE__ */` annotation can.
+        let is_pure = call_expr.pure && ctx.annotations();
 
         if let Expression::ArrowFunctionExpression(f) = &mut call_expr.callee
             && !f.r#async
