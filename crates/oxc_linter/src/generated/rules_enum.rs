@@ -19485,6 +19485,41 @@ impl RuleEnum {
             Self::ReactStateInConstructor(_) => ReactStateInConstructor::VERSION,
             Self::ReactStylePropObject(_) => ReactStylePropObject::VERSION,
             Self::ReactVoidDomElementsNoChildren(_) => ReactVoidDomElementsNoChildren::VERSION,
+            Self::ReactCompilerCapitalizedCalls(_) => ReactCompilerCapitalizedCalls::VERSION,
+            Self::ReactCompilerCompilerConfig(_) => ReactCompilerCompilerConfig::VERSION,
+            Self::ReactCompilerErrorBoundaries(_) => ReactCompilerErrorBoundaries::VERSION,
+            Self::ReactCompilerExhaustiveEffectDependencies(_) => {
+                ReactCompilerExhaustiveEffectDependencies::VERSION
+            }
+            Self::ReactCompilerFbt(_) => ReactCompilerFbt::VERSION,
+            Self::ReactCompilerGating(_) => ReactCompilerGating::VERSION,
+            Self::ReactCompilerGlobals(_) => ReactCompilerGlobals::VERSION,
+            Self::ReactCompilerHooks(_) => ReactCompilerHooks::VERSION,
+            Self::ReactCompilerImmutability(_) => ReactCompilerImmutability::VERSION,
+            Self::ReactCompilerIncompatibleLibrary(_) => ReactCompilerIncompatibleLibrary::VERSION,
+            Self::ReactCompilerInvariant(_) => ReactCompilerInvariant::VERSION,
+            Self::ReactCompilerMemoDependencies(_) => ReactCompilerMemoDependencies::VERSION,
+            Self::ReactCompilerMemoizedEffectDependencies(_) => {
+                ReactCompilerMemoizedEffectDependencies::VERSION
+            }
+            Self::ReactCompilerNoDerivingStateInEffects(_) => {
+                ReactCompilerNoDerivingStateInEffects::VERSION
+            }
+            Self::ReactCompilerPreserveManualMemoization(_) => {
+                ReactCompilerPreserveManualMemoization::VERSION
+            }
+            Self::ReactCompilerPurity(_) => ReactCompilerPurity::VERSION,
+            Self::ReactCompilerReactCompilerRule(_) => ReactCompilerReactCompilerRule::VERSION,
+            Self::ReactCompilerRefs(_) => ReactCompilerRefs::VERSION,
+            Self::ReactCompilerRuleSuppression(_) => ReactCompilerRuleSuppression::VERSION,
+            Self::ReactCompilerSetStateInEffect(_) => ReactCompilerSetStateInEffect::VERSION,
+            Self::ReactCompilerSetStateInRender(_) => ReactCompilerSetStateInRender::VERSION,
+            Self::ReactCompilerStaticComponents(_) => ReactCompilerStaticComponents::VERSION,
+            Self::ReactCompilerSyntax(_) => ReactCompilerSyntax::VERSION,
+            Self::ReactCompilerTodoRule(_) => ReactCompilerTodoRule::VERSION,
+            Self::ReactCompilerUnsupportedSyntax(_) => ReactCompilerUnsupportedSyntax::VERSION,
+            Self::ReactCompilerUseMemo(_) => ReactCompilerUseMemo::VERSION,
+            Self::ReactCompilerVoidUseMemo(_) => ReactCompilerVoidUseMemo::VERSION,
             Self::ReactPerfJsxNoJsxAsProp(_) => ReactPerfJsxNoJsxAsProp::VERSION,
             Self::ReactPerfJsxNoNewArrayAsProp(_) => ReactPerfJsxNoNewArrayAsProp::VERSION,
             Self::ReactPerfJsxNoNewFunctionAsProp(_) => ReactPerfJsxNoNewFunctionAsProp::VERSION,
