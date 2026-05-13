@@ -1808,9 +1808,8 @@ impl<'a> PeepholeOptimizations {
             && !f.params.has_parameter()
             && f.body.statements.len() == 1
         {
-            if f.expression {
+            if let Some(expr) = f.get_expression_mut() {
                 // Replace "(() => foo())()" with "foo()"
-                let expr = f.get_expression_mut().unwrap();
                 *e = if is_pure && Self::is_expression_result_unused(ctx) {
                     ctx.ast.void_0(call_expr.span)
                 } else if let Some(taken) = Self::try_take_iife_body(expr, is_pure, ctx) {
@@ -1846,8 +1845,7 @@ impl<'a> PeepholeOptimizations {
                         // Replace "(() => { return foo() })()" with "foo()"
                         *e = if is_pure && Self::is_expression_result_unused(ctx) {
                             ctx.ast.void_0(call_expr.span)
-                        } else if let Some(taken) =
-                            Self::try_take_iife_body(argument, is_pure, ctx)
+                        } else if let Some(taken) = Self::try_take_iife_body(argument, is_pure, ctx)
                         {
                             taken
                         } else {
