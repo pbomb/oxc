@@ -592,3 +592,12 @@ source: crates/oxc_linter/src/tester.rs
    ╰────
   help: Convert the class component to a function component.
   note: See https://react.dev/reference/react/Component#migrating-a-simple-component-from-a-class-to-a-function
+
+  ⚠ react(prefer-function-component): Class component should be written as a function component.
+   ╭─[prefer_function_component.tsx:1:7]
+ 1 │ class Foo {
+   ·       ───
+ 2 │                handleClick() {
+   ╰────
+  help: Convert the class component to a function component.
+  note: See https://react.dev/reference/react/Component#migrating-a-simple-component-from-a-class-to-a-function

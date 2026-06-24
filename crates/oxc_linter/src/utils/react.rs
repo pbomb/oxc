@@ -6,7 +6,7 @@ use oxc_ast::{
         ArrowFunctionExpression, CallExpression, Expression, Function, FunctionBody,
         JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXChild, JSXElement,
         JSXElementName, JSXExpression, JSXFragment, JSXMemberExpression, JSXMemberExpressionObject,
-        JSXOpeningElement, Statement, StaticMemberExpression,
+        JSXOpeningElement, Statement, StaticMemberExpression, VariableDeclarator,
     },
 };
 use oxc_ast_visit::{Visit, walk};
@@ -14,6 +14,7 @@ use oxc_ecmascript::{ToBoolean, WithoutGlobalReferenceInformation};
 use oxc_semantic::AstNode;
 use oxc_syntax::operator::UnaryOperator;
 use oxc_syntax::scope::ScopeFlags;
+use rustc_hash::FxHashSet;
 
 use crate::globals::HTML_TAG;
 use crate::{LintContext, OxlintSettings};
@@ -824,12 +825,12 @@ pub fn find_innermost_function_with_jsx<'a>(
             None
         }
         Expression::FunctionExpression(func) => {
-            // Check if this function contains JSX
-            if function_contains_jsx(func) { Some(InnermostFunction::Function(func)) } else { None }
+            // Check if this function returns JSX
+            if function_returns_jsx(func) { Some(InnermostFunction::Function(func)) } else { None }
         }
         Expression::ArrowFunctionExpression(arrow_func) => {
-            // Check if this arrow function contains JSX
-            if expression_contains_jsx(expr) {
+            // Check if this arrow function returns JSX
+            if expression_returns_jsx(expr) {
                 Some(InnermostFunction::ArrowFunction)
             } else {
                 // Check if this arrow function returns another function that contains JSX
@@ -862,33 +863,22 @@ pub fn find_innermost_function_with_jsx<'a>(
 /// Stops at nested function boundaries to avoid detecting JSX from child components.
 struct JsxFinder {
     found: bool,
-    is_in_argument: bool,
 }
 
 impl JsxFinder {
     fn new() -> Self {
-        Self { found: false, is_in_argument: false }
+        Self { found: false }
     }
 }
 
 impl<'a> Visit<'a> for JsxFinder {
     fn visit_jsx_element(&mut self, _elem: &JSXElement<'a>) {
-        if !self.is_in_argument {
-            self.found = true;
-        }
+        self.found = true;
         // Don't walk children - we found what we need
     }
 
     fn visit_jsx_fragment(&mut self, _frag: &JSXFragment<'a>) {
-        if !self.is_in_argument {
-            self.found = true;
-        }
-    }
-
-    fn visit_arguments(&mut self, it: &oxc_allocator::Vec<'a, oxc_ast::ast::Argument<'a>>) {
-        self.is_in_argument = true;
-        walk::walk_arguments(self, it);
-        self.is_in_argument = false;
+        self.found = true;
     }
 
     fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
@@ -929,6 +919,115 @@ pub fn expression_contains_jsx(expr: &Expression) -> bool {
         Expression::ArrowFunctionExpression(arrow_func) => {
             function_body_contains_jsx(&arrow_func.body)
         }
+        _ => false,
+    }
+}
+
+/// Checks whether an expression *evaluates to* JSX, i.e. it is a value usable in
+/// return position of a component.
+///
+/// Unlike [`function_body_contains_jsx`], this does **not** look at JSX appearing
+/// only as a call argument (e.g. `foo(<div />)`), matching the behavior of
+/// upstream `eslint-plugin-react`, which treats such cases as utility functions
+/// rather than components. It does recognize JSX returned through conditionals,
+/// logical expressions, sequences, and `React.createElement` calls.
+fn expression_is_jsx_value(expr: &Expression) -> bool {
+    match expr.without_parentheses() {
+        Expression::JSXElement(_) | Expression::JSXFragment(_) => true,
+        Expression::ConditionalExpression(cond) => {
+            expression_is_jsx_value(&cond.consequent) || expression_is_jsx_value(&cond.alternate)
+        }
+        Expression::LogicalExpression(logical) => {
+            expression_is_jsx_value(&logical.left) || expression_is_jsx_value(&logical.right)
+        }
+        Expression::SequenceExpression(seq) => {
+            seq.expressions.last().is_some_and(expression_is_jsx_value)
+        }
+        Expression::CallExpression(call) => crate::utils::is_create_element_call(call),
+        _ => false,
+    }
+}
+
+/// Visitor that searches for JSX in *return position* within a function body.
+///
+/// Records identifiers bound to JSX values (`const x = <div />`) so that
+/// `return x;` is correctly recognized as returning JSX. Stops at nested function
+/// boundaries, mirroring [`JsxFinder`].
+struct JsxReturnFinder<'a> {
+    found: bool,
+    jsx_vars: FxHashSet<&'a str>,
+}
+
+impl JsxReturnFinder<'_> {
+    fn new() -> Self {
+        Self { found: false, jsx_vars: FxHashSet::default() }
+    }
+}
+
+impl<'a> Visit<'a> for JsxReturnFinder<'a> {
+    fn visit_variable_declarator(&mut self, decl: &VariableDeclarator<'a>) {
+        if let Some(init) = &decl.init
+            && expression_is_jsx_value(init)
+            && let Some(name) = decl.id.get_identifier_name()
+        {
+            self.jsx_vars.insert(name.as_str());
+        }
+        walk::walk_variable_declarator(self, decl);
+    }
+
+    fn visit_return_statement(&mut self, stmt: &oxc_ast::ast::ReturnStatement<'a>) {
+        if let Some(arg) = &stmt.argument {
+            if expression_is_jsx_value(arg) {
+                self.found = true;
+            } else if let Expression::Identifier(ident) = arg.without_parentheses()
+                && self.jsx_vars.contains(ident.name.as_str())
+            {
+                self.found = true;
+            }
+        }
+    }
+
+    // Don't recurse into nested functions - they're separate components.
+    fn visit_function(&mut self, _func: &Function<'a>, _flags: ScopeFlags) {}
+    fn visit_arrow_function_expression(&mut self, _arrow: &ArrowFunctionExpression<'a>) {}
+}
+
+/// Checks if a function body returns JSX (concise return positions only), as
+/// opposed to merely containing JSX somewhere. See [`expression_is_jsx_value`].
+pub fn function_body_returns_jsx(body: &FunctionBody) -> bool {
+    let mut finder = JsxReturnFinder::new();
+    finder.visit_function_body(body);
+    finder.found
+}
+
+/// Checks if a function returns JSX. See [`function_body_returns_jsx`].
+pub fn function_returns_jsx(func: &Function) -> bool {
+    func.body.as_ref().is_some_and(|body| function_body_returns_jsx(body))
+}
+
+/// Checks if an arrow function returns JSX.
+///
+/// For concise-body arrows (`() => <div />`) the body expression itself is the
+/// return value; for block-bodied arrows top-level `return` statements are
+/// inspected. JSX appearing only as a call argument does not count.
+pub fn arrow_returns_jsx(arrow: &ArrowFunctionExpression) -> bool {
+    if arrow.expression {
+        // Concise body: a single `ExpressionStatement` holds the returned value.
+        matches!(
+            arrow.body.statements.first(),
+            Some(Statement::ExpressionStatement(stmt)) if expression_is_jsx_value(&stmt.expression)
+        )
+    } else {
+        function_body_returns_jsx(&arrow.body)
+    }
+}
+
+/// Checks if a function-like expression (function or arrow function) returns JSX.
+/// JSX appearing only as a call argument does not count.
+pub fn expression_returns_jsx(expr: &Expression) -> bool {
+    match expr {
+        Expression::FunctionExpression(func) => function_returns_jsx(func),
+        Expression::ArrowFunctionExpression(arrow) => arrow_returns_jsx(arrow),
         _ => false,
     }
 }

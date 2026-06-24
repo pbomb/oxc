@@ -204,3 +204,11 @@ source: crates/oxc_linter/src/tester.rs
    ·                        ────────────────
    ╰────
   help: Move this component to a separate file.
+
+  ⚠ react(no-multi-comp): Declare only one React component per file. Found: B
+   ╭─[no_multi_comp.tsx:2:17]
+ 1 │ const A = () => <div />;
+ 2 │           const B = memo(() => wrap(<div />));
+   ·                 ─────────────────────────────
+   ╰────
+  help: Move this component to a separate file.

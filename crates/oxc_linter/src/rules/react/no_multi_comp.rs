@@ -739,6 +739,13 @@ fn test() {
           export const Bar = () => { return null; }", None, None),
         ("export const Foo = () => null;
           export const Bar = () => null;", None, None),
+        // Regression guard: the shared `function_body_contains_jsx` helper must keep
+        // its "JSX anywhere" semantics. JSX passed as a call argument inside an
+        // HOC-wrapped arrow still counts toward the multi-component check. Narrowing
+        // the helper to ignore argument-position JSX would drop `B` and turn this into
+        // a false negative.
+        ("const A = () => <div />;
+          const B = memo(() => wrap(<div />));", None, None),
     ];
 
     Tester::new(NoMultiComp::NAME, NoMultiComp::PLUGIN, pass, fail).test_and_snapshot();
