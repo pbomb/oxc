@@ -18,9 +18,9 @@ use crate::{
     context::{ContextHost, LintContext},
     rule::{DefaultRuleConfig, Rule},
     utils::{
-        expression_contains_jsx, function_body_contains_jsx, function_contains_jsx,
-        is_create_element_call, is_es6_component, is_hoc_call, is_react_component_name,
-        is_react_hook,
+        arrow_returns_jsx, expression_contains_jsx, function_body_contains_jsx,
+        function_contains_jsx, is_create_element_call, is_es6_component, is_hoc_call,
+        is_react_component_name, is_react_hook,
     },
 };
 
@@ -216,7 +216,7 @@ impl NoUnstableNestedComponents {
             return None;
         }
 
-        let contains_jsx = function_body_contains_jsx(&arrow.body);
+        let contains_jsx = arrow_returns_jsx(arrow);
         if !contains_jsx {
             return None;
         }
@@ -325,9 +325,7 @@ fn find_parent_component_name(
                 }
             }
             AstKind::ArrowFunctionExpression(arrow) => {
-                if is_first_argument_of_hoc_call(ancestor, ctx)
-                    || !function_body_contains_jsx(&arrow.body)
-                {
+                if is_first_argument_of_hoc_call(ancestor, ctx) || !arrow_returns_jsx(arrow) {
                     continue;
                 }
 

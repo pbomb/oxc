@@ -21,7 +21,7 @@ use crate::{
     context::LintContext,
     rule::{DefaultRuleConfig, Rule},
     utils::{
-        InnermostFunction, expression_contains_jsx, find_innermost_function_with_jsx,
+        InnermostFunction, expression_returns_jsx, find_innermost_function_with_jsx,
         function_body_contains_jsx, function_contains_jsx, is_hoc_call, is_react_component_name,
     },
 };
@@ -489,8 +489,8 @@ fn is_react_component_node<'a>(
 
             // Check for function/arrow function components with JSX
             if let Some(expr) = &decl.init {
-                // Check if it's a direct component (has JSX directly)
-                let contains_jsx = expression_contains_jsx(expr);
+                // Check if it's a direct component (returns JSX directly)
+                let contains_jsx = expression_returns_jsx(expr);
                 if contains_jsx
                     && name.as_ref().is_some_and(|name| is_react_component_name(name.as_str()))
                 {

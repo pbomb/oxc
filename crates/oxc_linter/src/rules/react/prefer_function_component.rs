@@ -982,6 +982,19 @@ fn test() {
              }",
             None,
         ),
+        // Regression guard: `class_body_contains_jsx` must keep its "JSX anywhere"
+        // semantics. A non-extending class whose method only passes JSX as a call
+        // argument still contains JSX and must be flagged. Narrowing the shared
+        // `function_contains_jsx` helper to ignore argument-position JSX would make
+        // this a false negative.
+        (
+            "class Foo {
+               handleClick() {
+                 showToast(<div />);
+               }
+             }",
+            None,
+        ),
     ];
 
     Tester::new(PreferFunctionComponent::NAME, PreferFunctionComponent::PLUGIN, pass, fail)
